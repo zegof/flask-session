@@ -7,7 +7,7 @@ from flask import Flask
 try:
     from flask_sqlalchemy import SQLAlchemy
 except ImportError:
-    SQLalchemy = None
+    SQLAlchemy = None
 
 try:
     from flask_sqlalchemy_lite import SQLAlchemy as SQLAlchemyLite
@@ -125,9 +125,10 @@ class SqlAlchemySessionInterface(ServerSideSessionInterface):
             base_model or client.Model, table, schema, bind_key, sequence
         )
         # Create the table if it does not exist
+        self.bind_key = bind_key
         with app.app_context():
             if bind_key:
-                engine = self.client.get_engine(app, bind=bind_key)
+                engine = self.client.engines[bind_key]
             else:
                 engine = self.client.engine
             self.sql_session_model.__table__.create(bind=engine, checkfirst=True)
@@ -145,24 +146,24 @@ class SqlAlchemySessionInterface(ServerSideSessionInterface):
     @retry_query()
     def _delete_expired_sessions(self) -> None:
         try:
-            self.client.session.execute(delete(self.sql_session_model).where(self.sql_session_model.expiry <= datetime.utcnow()))
-            self.client.session.commit()
+            self.client.get_session(self.bind_key).execute(delete(self.sql_session_model).where(self.sql_session_model.expiry <= datetime.utcnow()))
+            self.client.get_session(self.bind_key).commit()
         except Exception:
-            self.client.session.rollback()
+            self.client.get_session(self.bind_key).rollback()
             raise
 
     @retry_query()
     def _retrieve_session_data(self, store_id: str) -> Optional[dict]:
         # Get the saved session (record) from the database
-        record = self.client.session.scalar(select(self.sql_session_model).where(self.sql_session_model.session_id==store_id))
+        record = self.client.get_session(self.bind_key).scalar(select(self.sql_session_model).where(self.sql_session_model.session_id==store_id))
 
         # "Delete the session record if it is expired as SQL has no TTL ability
         if record and (record.expiry is None or record.expiry <= datetime.utcnow()):
             try:
-                self.client.session.delete(record)
-                self.client.session.commit()
+                self.client.get_session(self.bind_key).delete(record)
+                self.client.get_session(self.bind_key).commit()
             except Exception:
-                self.client.session.rollback()
+                self.client.get_session(self.bind_key).rollback()
                 raise
             record = None
 
@@ -174,10 +175,10 @@ class SqlAlchemySessionInterface(ServerSideSessionInterface):
     @retry_query()
     def _delete_session(self, store_id: str) -> None:
         try:
-            self.client.session.execute(delete(self.sql_session_model).where(self.sql_session_model.session_id==store_id))
-            self.client.session.commit()
+            self.client.get_session(self.bind_key).execute(delete(self.sql_session_model).where(self.sql_session_model.session_id==store_id))
+            self.client.get_session(self.bind_key).commit()
         except Exception:
-            self.client.session.rollback()
+            self.client.get_session(self.bind_key).rollback()
             raise
 
     @retry_query()
@@ -191,7 +192,7 @@ class SqlAlchemySessionInterface(ServerSideSessionInterface):
 
         # Update existing or create new session in the database
         try:
-            record = self.client.session.scalar(select(self.sql_session_model).where(self.sql_session_model.session_id==store_id))
+            record = self.client.get_session(self.bind_key).scalar(select(self.sql_session_model).where(self.sql_session_model.session_id==store_id))
             if record:
                 record.data = serialized_session_data
                 record.expiry = storage_expiration_datetime
@@ -201,8 +202,8 @@ class SqlAlchemySessionInterface(ServerSideSessionInterface):
                     data=serialized_session_data,
                     expiry=storage_expiration_datetime,
                 )
-                self.client.session.add(record)
-            self.client.session.commit()
+                self.client.get_session(self.bind_key).add(record)
+            self.client.get_session(self.bind_key).commit()
         except Exception:
-            self.client.session.rollback()
+            self.client.get_session(self.bind_key).rollback()
             raise
