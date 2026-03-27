@@ -100,6 +100,9 @@ class Session:
         SESSION_SQLALCHEMY_BIND_KEY = config.get(
             "SESSION_SQLALCHEMY_BIND_KEY", Defaults.SESSION_SQLALCHEMY_BIND_KEY
         )
+        SESSION_SQLALCHEMY_BASE_MODEL = config.get(
+            "SESSION_SQLALCHEMY_BASE_MODEL", Defaults.SESSION_SQLALCHEMY_BASE_MODEL
+        )
 
         # DynamoDB settings
         SESSION_DYNAMODB = config.get("SESSION_DYNAMODB", Defaults.SESSION_DYNAMODB)
@@ -186,6 +189,7 @@ class Session:
                 schema=SESSION_SQLALCHEMY_SCHEMA,
                 bind_key=SESSION_SQLALCHEMY_BIND_KEY,
                 cleanup_n_requests=SESSION_CLEANUP_N_REQUESTS,
+                base_model=SESSION_SQLALCHEMY_BASE_MODEL,
             )
         elif SESSION_TYPE == "dynamodb":
             from .dynamodb import DynamoDBSessionInterface
